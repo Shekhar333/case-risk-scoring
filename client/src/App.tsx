@@ -1,6 +1,31 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import type { Alert, CaseView, ScoreSummary } from "../../server/src/types";
+import { useEffect, useState, type FormEvent } from "react";
+import { CATEGORIES, type Alert, type CaseView, type Category, type PolicyName, type ScoreSummary } from "../../server/src/types";
 import { api } from "./api";
+
+const CATEGORY_LABEL: Record<Category, string> = {
+  phishing: "Phishing",
+  malware: "Malware",
+  network_scan: "Network scan",
+  credential_access: "Credential access",
+};
+
+const POLICY_LABEL: Record<PolicyName, string> = {
+  REPEAT_NOISE_DAMPING: "noise damping",
+  CRITICAL_ASSET_BOOST: "critical asset boost",
+  APT_CAMPAIGN_LINK: "APT campaign link",
+};
+
+/** Severity bands on the 0–100 scale; `to` is exclusive except for the last band. */
+const BANDS = [
+  { name: "Low", from: 0, to: 30 },
+  { name: "Medium", from: 30, to: 60 },
+  { name: "High", from: 60, to: 85 },
+  { name: "Critical", from: 85, to: 100 },
+] as const;
+
+function tokens(input: string): string[] {
+  return [...new Set(input.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean))];
+}
 
 export function App() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -44,158 +69,233 @@ export function App() {
     void run(() => api.setPolicies(policyInput));
   }
 
+  function togglePolicy(name: string) {
+    const current = tokens(policyInput);
+    const next = current.includes(name) ? current.filter((t) => t !== name) : [...current, name];
+    setPolicyInput(next.join(", "));
+  }
+
   const inCase = new Set(caseView?.alerts.map((a) => a.id));
   const ignored = new Set(caseView?.summary.ignoredAlertIds);
+  const typed = tokens(policyInput);
+  const pending = caseView !== null && [...typed].sort().join() !== [...caseView.policies].sort().join();
 
   return (
-    <main>
-      <header>
-        <h1>Incident Case Risk Scoring</h1>
+    <div className="app">
+      <header className="masthead">
+        <h1>Case risk scoring</h1>
+        <p>Build a case from alerts, choose scoring policies, and see what to investigate first.</p>
       </header>
 
-      {error && (
-        <div className="error" role="alert">
-          {error}
-          <button className="link" onClick={() => setError(null)}>
-            dismiss
-          </button>
-        </div>
-      )}
-
-      <div className="layout">
-        <section>
-          <h2>Available alerts</h2>
-          <AlertTable
-            alerts={alerts}
-            action={(a) => (
-              <button disabled={busy || inCase.has(a.id)} onClick={() => run(() => api.addAlert(a.id), false)}>
-                {inCase.has(a.id) ? "In case" : "Add to case"}
-              </button>
-            )}
-          />
+      <main className="layout">
+        <section className="queue" aria-labelledby="queue-title">
+          <div className="pane-head">
+            <h2 id="queue-title">Alert queue</h2>
+            <span className="count">{alerts.length} alerts</span>
+          </div>
+          {CATEGORIES.map((category) => {
+            const group = alerts.filter((a) => a.category === category);
+            if (group.length === 0) return null;
+            return (
+              <div className="group" key={category}>
+                <h3 className="group-title">
+                  {CATEGORY_LABEL[category]} <span className="count">{group.length}</span>
+                </h3>
+                <ul className="rows">
+                  {group.map((a) => (
+                    <li key={a.id} className={inCase.has(a.id) ? "row row--taken" : "row"}>
+                      <AlertText alert={a} />
+                      <span className="row-score">{a.baseScore}</span>
+                      <button
+                        className="btn btn--small"
+                        disabled={busy || inCase.has(a.id)}
+                        onClick={() => run(() => api.addAlert(a.id), false)}
+                      >
+                        {inCase.has(a.id) ? "In case" : "Add to case"}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </section>
 
-        <section>
-          <div className="section-head">
-            <h2>Case ({caseView?.alerts.length ?? 0} alerts)</h2>
-            {caseView && caseView.alerts.length > 0 && (
-              <button className="secondary" disabled={busy} onClick={() => run(api.clearCase)}>
-                Clear case
+        <section className="bench" aria-label="Case">
+          {caseView && <ScorePanel summary={caseView.summary} empty={caseView.alerts.length === 0} />}
+
+          <form className="policies" onSubmit={onApplyPolicies}>
+            <label htmlFor="policy-input">Policies</label>
+            <div className="policy-row">
+              <input
+                id="policy-input"
+                value={policyInput}
+                onChange={(e) => setPolicyInput(e.target.value)}
+                placeholder="e.g. REPEAT_NOISE_DAMPING, CRITICAL_ASSET_BOOST"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <button type="submit" className="btn" disabled={busy}>
+                Apply
               </button>
+            </div>
+            <div className="chips" role="group" aria-label="Insert a policy">
+              {policyNames.map((p) => (
+                <button
+                  type="button"
+                  key={p}
+                  className="chip"
+                  aria-pressed={typed.includes(p)}
+                  onClick={() => togglePolicy(p)}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <p className="hint">
+              Separate names with commas. Noise damping works with either escalation policy, but
+              CRITICAL_ASSET_BOOST and APT_CAMPAIGN_LINK can't be used together.
+              {pending && <strong className="pending"> Not applied yet.</strong>}
+            </p>
+            {error && (
+              <div className="error" role="alert">
+                <span>{error}</span>
+                <button type="button" className="btn-text" onClick={() => setError(null)}>
+                  Dismiss
+                </button>
+              </div>
             )}
-          </div>
-          {caseView && caseView.alerts.length === 0 ? (
-            <p className="muted">No alerts in the case yet. Add some from the list.</p>
-          ) : (
-            <AlertTable
-              alerts={caseView?.alerts ?? []}
-              rowClass={(a) => (ignored.has(a.id) ? "ignored" : undefined)}
-              note={(a) => (ignored.has(a.id) ? "ignored by damping" : undefined)}
-              action={(a) => (
-                <button disabled={busy} onClick={() => run(() => api.removeAlert(a.id), false)}>
-                  Remove
+          </form>
+
+          <div className="case">
+            <div className="pane-head">
+              <h2>In this case</h2>
+              <span className="count">{caseView?.alerts.length ?? 0} alerts</span>
+              {caseView && caseView.alerts.length > 0 && (
+                <button className="btn-text push" disabled={busy} onClick={() => run(api.clearCase)}>
+                  Clear case
                 </button>
               )}
-            />
-          )}
-
-          <h2>Policies</h2>
-          <form onSubmit={onApplyPolicies} className="policy-form">
-            <input
-              aria-label="Policies"
-              value={policyInput}
-              onChange={(e) => setPolicyInput(e.target.value)}
-              placeholder="e.g. REPEAT_NOISE_DAMPING, CRITICAL_ASSET_BOOST"
-            />
-            <button type="submit" disabled={busy}>
-              Apply
-            </button>
-          </form>
-          <p className="muted small">
-            Comma-separated. Valid: {policyNames.join(", ")}. Only one of CRITICAL_ASSET_BOOST /
-            APT_CAMPAIGN_LINK at a time. Active: <strong>{caseView?.policies.join(", ") || "none"}</strong>
-          </p>
-
-          <h2>Score summary</h2>
-          {caseView && <Summary summary={caseView.summary} />}
+            </div>
+            {caseView && caseView.alerts.length === 0 ? (
+              <p className="empty">No alerts yet. Add alerts from the queue to score this case.</p>
+            ) : (
+              <ul className="rows">
+                {caseView?.alerts.map((a) => (
+                  <li key={a.id} className={ignored.has(a.id) ? "row row--ignored" : "row"}>
+                    <AlertText
+                      alert={a}
+                      note={ignored.has(a.id) ? "Not counted: only the highest network scan counts" : undefined}
+                      showCategory
+                    />
+                    <span className="row-score">{a.baseScore}</span>
+                    <button
+                      className="btn btn--small btn--quiet"
+                      disabled={busy}
+                      onClick={() => run(() => api.removeAlert(a.id), false)}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
+      </main>
+    </div>
+  );
+}
+
+function AlertText({ alert, note, showCategory }: { alert: Alert; note?: string; showCategory?: boolean }) {
+  return (
+    <div className="row-text">
+      <span className="row-title">{alert.title}</span>
+      <span className="row-meta">
+        {alert.sourceHost}
+        {showCategory && <span className="row-cat">{CATEGORY_LABEL[alert.category]}</span>}
+      </span>
+      {note && <span className="row-note">{note}</span>}
+    </div>
+  );
+}
+
+function ScorePanel({ summary, empty }: { summary: ScoreSummary; empty: boolean }) {
+  const band = summary.severity.toLowerCase();
+  const steps = summary.adjustments.filter((a) => a.applied);
+  const capCut = summary.finalScore - summary.uncappedScore;
+  const rawPos = Math.min(summary.rawScore, 100);
+
+  return (
+    <div className={`score score--${band}`}>
+      <div className="score-head">
+        <span className="score-number" aria-label={`Final score ${summary.finalScore}`}>
+          {summary.finalScore}
+        </span>
+        <span className="score-band">{summary.severity}</span>
       </div>
-    </main>
-  );
-}
 
-function AlertTable(props: {
-  alerts: Alert[];
-  action: (a: Alert) => ReactNode;
-  rowClass?: (a: Alert) => string | undefined;
-  note?: (a: Alert) => string | undefined;
-}) {
-  return (
-    <table>
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th>Category</th>
-          <th>Host</th>
-          <th className="num">Score</th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        {props.alerts.map((a) => (
-          <tr key={a.id} className={props.rowClass?.(a)}>
-            <td>
-              {a.title}
-              {props.note?.(a) && <div className="small muted">{props.note(a)}</div>}
-            </td>
-            <td>
-              <span className={`tag ${a.category}`}>{a.category}</span>
-            </td>
-            <td className="mono">{a.sourceHost}</td>
-            <td className="num">{a.baseScore}</td>
-            <td className="actions">{props.action(a)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
+      <div className="ruler" aria-hidden="true">
+        <div className="ruler-track">
+          {BANDS.map((b) => (
+            <div
+              key={b.name}
+              className={`ruler-band ruler-band--${b.name.toLowerCase()}${b.name === summary.severity ? " is-current" : ""}`}
+              style={{ width: `${b.to - b.from}%` }}
+            >
+              <span className="ruler-label">
+                {b.name} <span className="ruler-range">{b.from}–{b.name === "Critical" ? 100 : b.to - 1}</span>
+              </span>
+            </div>
+          ))}
+          {summary.rawScore !== summary.finalScore && (
+            <span className="ruler-raw" style={{ left: `${rawPos}%` }} title={`Raw score ${summary.rawScore}`}>
+              <span>raw {summary.rawScore}</span>
+            </span>
+          )}
+          <span className="ruler-needle" style={{ left: `${summary.finalScore}%` }} />
+        </div>
+      </div>
 
-function Summary({ summary }: { summary: ScoreSummary }) {
-  const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
-  return (
-    <div className="summary">
-      <table>
-        <tbody>
-          <tr>
-            <th>Raw score</th>
-            <td className="num">{summary.rawScore}</td>
-          </tr>
-          {summary.adjustments.map((adj) => (
-            <tr key={adj.policy} className={adj.applied ? undefined : "not-applied"}>
-              <th>
-                {adj.policy}
-                <div className="small muted">{adj.reason}</div>
-              </th>
-              <td className="num">{adj.applied ? signed(adj.points) : "not applied"}</td>
-            </tr>
+      {empty ? (
+        <p className="equation">Score starts at 0 until the case has alerts.</p>
+      ) : (
+        <p className="equation">
+          <span className="term">
+            <b>{summary.rawScore}</b> raw
+          </span>
+          {steps.map((s) => (
+            <span className="term" key={s.policy}>
+              <span className="op">{s.points < 0 ? "−" : "+"}</span>
+              <b>{Math.abs(s.points)}</b> {POLICY_LABEL[s.policy]}
+            </span>
           ))}
           {summary.capped && (
-            <tr>
-              <th>
-                Cap at 100
-                <div className="small muted">Score before cap: {summary.uncappedScore}</div>
-              </th>
-              <td className="num">{signed(summary.finalScore - summary.uncappedScore)}</td>
-            </tr>
+            <span className="term">
+              <span className="op">−</span>
+              <b>{Math.abs(capCut)}</b> cap at 100
+            </span>
           )}
-          <tr className="total">
-            <th>Final score</th>
-            <td className="num">{summary.finalScore}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div className={`severity ${summary.severity.toLowerCase()}`}>{summary.severity}</div>
+          <span className="term term--total">
+            <span className="op">=</span>
+            <b>{summary.finalScore}</b>
+          </span>
+        </p>
+      )}
+
+      {summary.adjustments.length > 0 && (
+        <ul className="breakdown" aria-label="Adjustments">
+          {summary.adjustments.map((adj) => (
+            <li key={adj.policy} className={adj.applied ? "adj" : "adj adj--off"}>
+              <span className="adj-name">{adj.policy}</span>
+              <span className="adj-points">
+                {adj.applied ? (adj.points > 0 ? `+${adj.points}` : `−${Math.abs(adj.points)}`) : "Not applied"}
+              </span>
+              <span className="adj-reason">{adj.reason}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
