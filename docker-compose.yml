@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    image: case-risk-scoring
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      DATABASE_PATH: /data/app.db
+    volumes:
+      - case-data:/data
+    restart: unless-stopped
+
+volumes:
+  case-data:
