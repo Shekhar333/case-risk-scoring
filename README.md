@@ -1,4 +1,4 @@
-# Incident Case Risk Scoring
+# Incident Case Risk Scoring (assessment started around 10:20 AM and Finished around 11:00)
 
 A small full-stack tool for a SOC analyst. You pick security alerts from a list, group them into a **case**, choose scoring **policies**, and get one risk score with a full breakdown: raw score, each policy adjustment, final score (capped at 100) and a severity band.
 
