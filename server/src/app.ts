@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import express, { type ErrorRequestHandler } from "express";
 import { DEFAULT_CASE_ID, type DB } from "./db.js";
 import {
@@ -69,7 +68,7 @@ export function createApp(db: DB, options: { staticDir?: string } = {}) {
   if (options.staticDir && fs.existsSync(options.staticDir)) {
     const staticDir = options.staticDir;
     app.use(express.static(staticDir));
-    app.get("/{*splat}", (_req, res) => res.sendFile(path.join(staticDir, "index.html")));
+    app.get("/{*splat}", (_req, res) => res.sendFile("index.html", { root: staticDir }));
   }
 
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
