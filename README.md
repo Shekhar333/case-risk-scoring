@@ -71,7 +71,7 @@ Why this order:
 
 ## Running locally
 
-Requires Node 20+ (developed on Node 22).
+Requires Node 22+ (`better-sqlite3` 13 needs Node 22 or newer).
 
 ```bash
 npm install
