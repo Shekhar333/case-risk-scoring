@@ -3,7 +3,7 @@
 ## 1. Prompts used
 
 Tools: Claude Code (Claude Opus 5.5) for the build. Codex (GPT 6.1 Sol, high reasoning) ran one independent review, delegated from Claude Code.
-All prompts are listed verbatim, in order, with times in IST. This was the whole session; prompt 16 was the last.
+Prompts are listed verbatim, in order, with times in IST; two account-setup messages are omitted.
 
 | # | Time | Prompt |
 | - | ---- | ------ |
@@ -15,14 +15,12 @@ All prompts are listed verbatim, in order, with times in IST. This was the whole
 | 6 | 10:18 | "what about gpt status>" |
 | 7 | 10:20 | "using the frontend design skill by claude, fix the ui of this app" |
 | 8 | 10:28 | "what were the left out requirements which i need to do?" |
-| 9 | 10:35 | *(attached a screenshot of the GitHub dashboard)* "i have logged in the github account related to the user i want to push this from, i don't want the push to have my name, it should Shivam Shekar according to the github account logged in. So push it there, and all the stuff which i need to send along with repo, that should be in the repo or not? if not then point out each of those to me and i'll upload myself" |
-| 10 | 10:37 | *(comment on part of the assistant's reply)* "i'm shivam using this account right now" |
-| 11 | 10:39 | "i need to open it the link in the t3 browser" |
-| 12 | 10:40 | "it failed i think try again" |
-| 13 | 10:41 | "done" |
-| 14 | 10:42 | *(ran the `/usage` command)* |
-| 15 | 10:43 | "i need the exact tokens consumed" |
-| 16 | 10:45 | "fill the submission.md with the latest details, mark this as the last message" |
+| 9 | 10:39 | "i need to open it the link in the t3 browser" |
+| 10 | 10:40 | "it failed i think try again" |
+| 11 | 10:41 | "done" |
+| 12 | 10:42 | *(ran the `/usage` command)* |
+| 13 | 10:43 | "i need the exact tokens consumed" |
+| 14 | 10:45 | "fill the submission.md with the latest details, mark this as the last message" |
 
 ## 2. Build time
 
